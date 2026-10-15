@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Snake Game</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #0f172a;
+    color: #e2e8f0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    user-select: none;
+  }
+  h1 { margin: 0 0 8px; font-size: 28px; letter-spacing: 2px; }
+  .scores { display: flex; gap: 24px; margin-bottom: 12px; font-size: 18px; }
+  .scores span { color: #4ade80; font-weight: bold; }
+  .wrap { position: relative; }
+  canvas {
+    background: #450a0a;
+    border: 3px solid #7f1d1d;
+    border-radius: 8px;
+    display: block;
+    max-width: 92vw;
+    height: auto;
+  }
+  #overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15, 23, 42, 0.78);
+    border-radius: 8px;
+    text-align: center;
+    gap: 8px;
+  }
+  #overlay h2 { margin: 0; font-size: 30px; }
+  #overlay p { margin: 0; color: #94a3b8; }
+  button {
+    margin-top: 10px;
+    padding: 10px 24px;
+    font-size: 16px;
+    border: none;
+    border-radius: 6px;
+    background: #22c55e;
+    color: #052e16;
+    font-weight: bold;
+    cursor: pointer;
+  }
+  button:hover { background: #4ade80; }
+  .hint { margin-top: 12px; font-size: 14px; color: #94a3b8; }
+  .dpad { display: none; margin-top: 14px; grid-template-columns: repeat(3, 56px); grid-template-rows: repeat(2, 56px); gap: 6px; }
+  .dpad button { margin: 0; padding: 0; font-size: 22px; background: #334155; color: #e2e8f0; }
+  .dpad .up { grid-column: 2; grid-row: 1; }
+  .dpad .left { grid-column: 1; grid-row: 2; }
+  .dpad .down { grid-column: 2; grid-row: 2; }
+  .dpad .right { grid-column: 3; grid-row: 2; }
+  @media (hover: none) and (pointer: coarse) { .dpad { display: grid; } }
+</style>
+</head>
+<body>
+  <h1>👻 GHOST SNAKE</h1>
+  <div class="scores">
+    <div>Score: <span id="score">0</span></div>
+    <div>Best: <span id="best">0</span></div>
+  </div>
+  <div class="wrap">
+    <canvas id="game" width="400" height="400"></canvas>
+    <div id="overlay">
+      <h2 id="title">Ghost Snake</h2>
+      <p id="msg">Use arrow keys or WASD to move</p>
+      <button id="startBtn">Start Game</button>
+    </div>
+  </div>
+  <div class="hint">Arrows / WASD to move &bull; Space to pause</div>
+  <div class="dpad">
+    <button class="up" data-dir="up">▲</button>
+    <button class="left" data-dir="left">◀</button>
+    <button class="down" data-dir="down">▼</button>
+    <button class="right" data-dir="right">▶</button>
+  </div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const scoreEl = document.getElementById('score');
+  const bestEl = document.getElementById('best');
+  const overlay = document.getElementById('overlay');
+  const titleEl = document.getElementById('title');
+  const msgEl = document.getElementById('msg');
+  const startBtn = document.getElementById('startBtn');
+
+  const CELL = 20;
+  const COLS = canvas.width / CELL;
+  const ROWS = canvas.height / CELL;
+
+  const GHOST = '👻';
+  let snake, dir, nextDir, food, score, timer, speed, running, paused;
+  let best = 0;
+  try { best = parseInt(localStorage.getItem('snakeBest')) || 0; } catch (e) {}
+  bestEl.textContent = best;
+
+  function reset() {
+    snake = [{ x: 10, y: 10 }, { x: 9, y: 10 }, { x: 8, y: 10 }];
+    dir = { x: 1, y: 0 };
+    nextDir = { x: 1, y: 0 };
+    score = 0;
+    speed = 130;
+    paused = false;
+    scoreEl.textContent = 0;
+    placeFood();
+  }
+
+  function placeFood() {
+    do {
+      food = { x: Math.floor(Math.random() * COLS), y: Math.floor(Math.random() * ROWS) };
+    } while (snake.some(s => s.x === food.x && s.y === food.y));
+  }
+
+  function start() {
+    reset();
+    running = true;
+    overlay.style.display = 'none';
+    clearInterval(timer);
+    timer = setInterval(tick, speed);
+    draw();
+  }
+
+  function setDir(x, y) {
+    if (x === -dir.x && y === -dir.y) return; // no reversing
+    nextDir = { x, y };
+  }
+
+  function tick() {
+    if (paused) return;
+    dir = nextDir;
+    const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+
+    if (head.x < 0 || head.y < 0 || head.x >= COLS || head.y >= ROWS ||
+        snake.some(s => s.x === head.x && s.y === head.y)) {
+      return gameOver();
+    }
+
+    snake.unshift(head);
+    if (head.x === food.x && head.y === food.y) {
+      score++;
+      scoreEl.textContent = score;
+      if (score > best) {
+        best = score;
+        bestEl.textContent = best;
+        try { localStorage.setItem('snakeBest', best); } catch (e) {}
+      }
+      placeFood();
+      if (speed > 60) {
+        speed -= 4;
+        clearInterval(timer);
+        timer = setInterval(tick, speed);
+      }
+    } else {
+      snake.pop();
+    }
+    draw();
+  }
+
+  function gameOver() {
+    running = false;
+    clearInterval(timer);
+    titleEl.textContent = 'Game Over';
+    msgEl.textContent = 'Your score: ' + score;
+    startBtn.textContent = 'Play Again';
+    overlay.style.display = 'flex';
+  }
+
+  function draw() {
+    ctx.fillStyle = '#450a0a';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // subtle grid
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+    ctx.lineWidth = 1;
+    for (let i = 1; i < COLS; i++) {
+      ctx.beginPath(); ctx.moveTo(i * CELL, 0); ctx.lineTo(i * CELL, canvas.height); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, i * CELL); ctx.lineTo(canvas.width, i * CELL); ctx.stroke();
+    }
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = (CELL - 2) + 'px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif';
+
+    // food (a ghost with a soft glow)
+    ctx.save();
+    ctx.shadowColor = 'rgba(255,255,255,0.8)';
+    ctx.shadowBlur = 10;
+    ctx.fillText(GHOST, food.x * CELL + CELL / 2, food.y * CELL + CELL / 2 + 1);
+    ctx.restore();
+
+    // snake: made of ghosts (the thing it eats); tail fades out slightly
+    for (let i = snake.length - 1; i >= 0; i--) {
+      const s = snake[i];
+      ctx.globalAlpha = i === 0 ? 1 : Math.max(0.45, 1 - i * 0.03);
+      if (i === 0) {
+        ctx.save();
+        ctx.shadowColor = '#fca5a5';
+        ctx.shadowBlur = 14;
+        ctx.fillText(GHOST, s.x * CELL + CELL / 2, s.y * CELL + CELL / 2 + 1);
+        ctx.restore();
+      } else {
+        ctx.fillText(GHOST, s.x * CELL + CELL / 2, s.y * CELL + CELL / 2 + 1);
+      }
+    }
+    ctx.globalAlpha = 1;
+
+    if (paused) {
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 28px system-ui';
+      ctx.textAlign = 'center';
+      ctx.fillText('PAUSED', canvas.width / 2, canvas.height / 2);
+    }
+  }
+
+  document.addEventListener('keydown', e => {
+    const k = e.key.toLowerCase();
+    const keys = ['arrowup','arrowdown','arrowleft','arrowright',' ','w','a','s','d'];
+    if (keys.includes(k)) e.preventDefault();
+    if (!running) {
+      if (k === 'enter' || k === ' ') start();
+      return;
+    }
+    if (k === 'arrowup' || k === 'w') setDir(0, -1);
+    else if (k === 'arrowdown' || k === 's') setDir(0, 1);
+    else if (k === 'arrowleft' || k === 'a') setDir(-1, 0);
+    else if (k === 'arrowright' || k === 'd') setDir(1, 0);
+    else if (k === ' ') { paused = !paused; draw(); }
+  });
+
+  // touch controls
+  document.querySelectorAll('.dpad button').forEach(b => {
+    b.addEventListener('click', () => {
+      if (!running) return;
+      const d = b.dataset.dir;
+      if (d === 'up') setDir(0, -1);
+      if (d === 'down') setDir(0, 1);
+      if (d === 'left') setDir(-1, 0);
+      if (d === 'right') setDir(1, 0);
+    });
+  });
+
+  // swipe controls
+  let tx, ty;
+  canvas.addEventListener('touchstart', e => { tx = e.touches[0].clientX; ty = e.touches[0].clientY; }, { passive: true });
+  canvas.addEventListener('touchend', e => {
+    if (!running || tx == null) return;
+    const dx = e.changedTouches[0].clientX - tx;
+    const dy = e.changedTouches[0].clientY - ty;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 20) return;
+    if (Math.abs(dx) > Math.abs(dy)) setDir(dx > 0 ? 1 : -1, 0);
+    else setDir(0, dy > 0 ? 1 : -1);
+  }, { passive: true });
+
+  startBtn.addEventListener('click', start);
+  reset();
+  draw();
+})();
+</script>
+</body>
+</html>

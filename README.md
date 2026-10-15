@@ -1,6 +1,6 @@
 # 🐍 Ghost Snake Game
 
-A classic Snake game built with plain HTML, CSS and JavaScript. No frameworks, no build step, no dependencies. Just one file.
+A classic Snake game built with plain HTML, CSS and JavaScript.
 
 ## Features
 
